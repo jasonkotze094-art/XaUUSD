@@ -1,0 +1,7 @@
+{
+  "name": "Gold Beast EA",
+  "description": "Automated mobile trading robot EA platform with cybernetic HUD, real-time XAUUSD signals, and MetaTrader bridge controls",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
