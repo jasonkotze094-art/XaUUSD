@@ -41,5 +41,21 @@ class ExampleRobolectricTest {
     val initialAuto = viewModel.uiState.value.isAutoTradingActive
     viewModel.toggleAutoTrading()
     assertEquals(!initialAuto, viewModel.uiState.value.isAutoTradingActive)
+
+    // Test Trade History & Closing
+    val initialHistoryCount = viewModel.uiState.value.tradeHistory.size
+    val firstTrade = viewModel.uiState.value.openTrades.first()
+    viewModel.closeTrade(firstTrade.ticketId)
+    assertEquals(initialHistoryCount + 1, viewModel.uiState.value.tradeHistory.size)
+    assertEquals(firstTrade.ticketId, viewModel.uiState.value.tradeHistory.first().ticketId)
+
+    // Test Push Notification toggle & trigger
+    val initialPushEnabled = viewModel.uiState.value.isPushNotificationEnabled
+    viewModel.togglePushNotifications()
+    assertEquals(!initialPushEnabled, viewModel.uiState.value.isPushNotificationEnabled)
+
+    viewModel.togglePushNotifications()
+    assertEquals(true, viewModel.uiState.value.isPushNotificationEnabled)
+    viewModel.testTriggerSignalPushNotification()
   }
 }

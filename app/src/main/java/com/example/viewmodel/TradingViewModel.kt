@@ -5,15 +5,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.R
+import com.example.model.AccountPerformancePoint
 import com.example.model.ActionType
 import com.example.model.ActiveTrade
+import com.example.model.ClosedTrade
 import com.example.model.DiagnosticStatus
 import com.example.model.ExecutionMode
 import com.example.model.MetaTraderAccount
+import com.example.model.PerformanceTimeRange
 import com.example.model.RobotProfile
 import com.example.model.SignalType
 import com.example.model.TradeSignal
 import com.example.model.TradingSymbol
+import com.example.notification.SignalNotificationManager
 import com.example.ui.theme.AccentCyan
 import com.example.ui.theme.AccentGold
 import com.example.ui.theme.AccentGreen
@@ -41,9 +45,14 @@ data class TradingUiState(
     val symbols: List<TradingSymbol> = emptyList(),
     val signals: List<TradeSignal> = emptyList(),
     val openTrades: List<ActiveTrade> = emptyList(),
+    val tradeHistory: List<ClosedTrade> = emptyList(),
+    val performancePoints: List<AccountPerformancePoint> = emptyList(),
+    val selectedPerformanceRange: PerformanceTimeRange = PerformanceTimeRange.MONTH_1,
+    val isPerformanceApiLoading: Boolean = false,
     val account: MetaTraderAccount = MetaTraderAccount(),
     val diagnostics: DiagnosticStatus = DiagnosticStatus(),
     val isVoiceEnabled: Boolean = true,
+    val isPushNotificationEnabled: Boolean = true,
     val goldLivePrice: Double = 2642.80,
     val goldPriceChange: Double = 0.84,
     val totalProfitLoss: Double = 624.80,
@@ -56,11 +65,52 @@ data class TradingUiState(
 ) {
     val activeRobot: RobotProfile?
         get() = robots.find { it.id == activeRobotId } ?: robots.firstOrNull()
+
+    val totalRealizedPnl: Double
+        get() = tradeHistory.sumOf { it.profitLossUsd }
+
+    val winRatePercent: Double
+        get() {
+            if (tradeHistory.isEmpty()) return 0.0
+            val wins = tradeHistory.count { it.profitLossUsd > 0 }
+            return (wins.toDouble() / tradeHistory.size) * 100.0
+        }
+
+    val startingBalance: Double
+        get() = performancePoints.firstOrNull()?.balance ?: 10000.00
+
+    val peakEquity: Double
+        get() = performancePoints.maxOfOrNull { it.equity } ?: account.equity
+
+    val maxDrawdownPercent: Double
+        get() {
+            if (performancePoints.isEmpty()) return 2.4
+            var peak = performancePoints.first().equity
+            var maxDd = 0.0
+            for (p in performancePoints) {
+                if (p.equity > peak) {
+                    peak = p.equity
+                } else {
+                    val dd = (peak - p.equity) / peak * 100.0
+                    if (dd > maxDd) maxDd = dd
+                }
+            }
+            return Math.round(maxDd * 10.0) / 10.0
+        }
+
+    val netGrowthPercent: Double
+        get() {
+            val start = startingBalance
+            if (start <= 0.0) return 0.0
+            val growth = ((account.equity - start) / start) * 100.0
+            return Math.round(growth * 100.0) / 100.0
+        }
 }
 
 class TradingViewModel(application: Application) : AndroidViewModel(application) {
 
     private val voiceEngine = VoiceEngine(application)
+    private val signalNotificationManager = SignalNotificationManager(application)
 
     private val defaultRobots = listOf(
         RobotProfile(
@@ -179,12 +229,167 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         )
     )
 
+    private val defaultClosedTrades = listOf(
+        ClosedTrade(
+            ticketId = 8491950,
+            symbol = "XAUUSD",
+            type = SignalType.BUY,
+            lotSize = 0.10,
+            openPrice = 2628.50,
+            closePrice = 2641.80,
+            profitLossUsd = 133.00,
+            pips = 133.0,
+            openTime = "Today 10:15:22",
+            closeTime = "Today 12:44:09",
+            exitReason = "Take Profit Hit",
+            commissionUsd = -0.70,
+            swapUsd = 0.00
+        ),
+        ClosedTrade(
+            ticketId = 8491892,
+            symbol = "XAUUSD",
+            type = SignalType.BUY,
+            lotSize = 0.05,
+            openPrice = 2632.10,
+            closePrice = 2640.60,
+            profitLossUsd = 42.50,
+            pips = 85.0,
+            openTime = "Today 08:30:11",
+            closeTime = "Today 09:55:40",
+            exitReason = "Dynamic Trailing Stop",
+            commissionUsd = -0.35,
+            swapUsd = 0.00
+        ),
+        ClosedTrade(
+            ticketId = 8491744,
+            symbol = "GBPUSD",
+            type = SignalType.BUY,
+            lotSize = 0.05,
+            openPrice = 1.2810,
+            closePrice = 1.2858,
+            profitLossUsd = 24.00,
+            pips = 48.0,
+            openTime = "Today 07:12:05",
+            closeTime = "Today 08:20:18",
+            exitReason = "Take Profit Hit",
+            commissionUsd = -0.35,
+            swapUsd = 0.00
+        ),
+        ClosedTrade(
+            ticketId = 8491620,
+            symbol = "US30",
+            type = SignalType.BUY,
+            lotSize = 0.02,
+            openPrice = 43820.0,
+            closePrice = 43960.0,
+            profitLossUsd = 28.00,
+            pips = 140.0,
+            openTime = "Yesterday 20:45:00",
+            closeTime = "Yesterday 22:15:30",
+            exitReason = "Take Profit Hit",
+            commissionUsd = -0.40,
+            swapUsd = -0.15
+        ),
+        ClosedTrade(
+            ticketId = 8491510,
+            symbol = "EURUSD",
+            type = SignalType.SELL,
+            lotSize = 0.05,
+            openPrice = 1.0855,
+            closePrice = 1.0868,
+            profitLossUsd = -6.50,
+            pips = -13.0,
+            openTime = "Yesterday 16:20:14",
+            closeTime = "Yesterday 17:05:52",
+            exitReason = "Stop Loss Hit",
+            commissionUsd = -0.35,
+            swapUsd = 0.00
+        ),
+        ClosedTrade(
+            ticketId = 8491402,
+            symbol = "XAUUSD",
+            type = SignalType.BUY,
+            lotSize = 0.08,
+            openPrice = 2618.00,
+            closePrice = 2634.50,
+            profitLossUsd = 132.00,
+            pips = 165.0,
+            openTime = "Yesterday 11:00:30",
+            closeTime = "Yesterday 14:10:45",
+            exitReason = "Take Profit Hit",
+            commissionUsd = -0.56,
+            swapUsd = 0.00
+        )
+    )
+
+    private fun generatePerformancePoints(range: PerformanceTimeRange): List<AccountPerformancePoint> {
+        return when (range) {
+            PerformanceTimeRange.DAY_1 -> listOf(
+                AccountPerformancePoint("d1_1", "00:00", "00:00", 10850.00, 10850.00, 0.00, 0),
+                AccountPerformancePoint("d1_2", "02:00", "02:00", 10850.00, 10882.50, 32.50, 1),
+                AccountPerformancePoint("d1_3", "04:00", "04:00", 10882.50, 10910.00, 27.50, 2),
+                AccountPerformancePoint("d1_4", "06:00", "06:00", 10910.00, 10895.00, -15.00, 3),
+                AccountPerformancePoint("d1_5", "08:00", "08:00", 10910.00, 10980.20, 70.20, 5),
+                AccountPerformancePoint("d1_6", "10:00", "10:00", 10980.20, 11065.40, 85.20, 7),
+                AccountPerformancePoint("d1_7", "12:00", "12:00", 11065.40, 11130.00, 64.60, 9),
+                AccountPerformancePoint("d1_8", "14:00", "14:00", 11065.40, 11164.80, 99.40, 12)
+            )
+            PerformanceTimeRange.WEEK_1 -> listOf(
+                AccountPerformancePoint("w1_1", "Mon", "Mon", 10350.00, 10380.00, 30.00, 4),
+                AccountPerformancePoint("w1_2", "Tue", "Tue", 10480.00, 10520.00, 40.00, 11),
+                AccountPerformancePoint("w1_3", "Wed", "Wed", 10620.00, 10675.00, 55.00, 18),
+                AccountPerformancePoint("w1_4", "Thu", "Thu", 10790.00, 10840.00, 50.00, 26),
+                AccountPerformancePoint("w1_5", "Fri", "Fri", 10950.00, 10985.00, 35.00, 35),
+                AccountPerformancePoint("w1_6", "Sat", "Sat", 10985.00, 11020.00, 35.00, 35),
+                AccountPerformancePoint("w1_7", "Sun", "Today", 11065.40, 11164.80, 99.40, 42)
+            )
+            PerformanceTimeRange.MONTH_1 -> listOf(
+                AccountPerformancePoint("m1_1", "Jul 15", "W1", 10000.00, 10000.00, 0.00, 0),
+                AccountPerformancePoint("m1_2", "Jul 20", "W2", 10180.00, 10240.00, 60.00, 14),
+                AccountPerformancePoint("m1_3", "Jul 25", "W3", 10320.00, 10310.00, -10.00, 28),
+                AccountPerformancePoint("m1_4", "Jul 30", "W4", 10490.00, 10560.00, 70.00, 45),
+                AccountPerformancePoint("m1_5", "Aug 05", "W5", 10710.00, 10805.00, 95.00, 68),
+                AccountPerformancePoint("m1_6", "Aug 10", "W6", 10890.00, 10960.00, 70.00, 92),
+                AccountPerformancePoint("m1_7", "Aug 15", "Now", 11065.40, 11164.80, 99.40, 118)
+            )
+            PerformanceTimeRange.MONTH_3 -> listOf(
+                AccountPerformancePoint("m3_1", "May 15", "May", 8500.00, 8500.00, 0.00, 0),
+                AccountPerformancePoint("m3_2", "Jun 01", "Jun 1", 9050.00, 9120.00, 70.00, 48),
+                AccountPerformancePoint("m3_3", "Jun 15", "Jun 15", 9480.00, 9420.00, -60.00, 95),
+                AccountPerformancePoint("m3_4", "Jul 01", "Jul 1", 9950.00, 10050.00, 100.00, 150),
+                AccountPerformancePoint("m3_5", "Jul 15", "Jul 15", 10300.00, 10380.00, 80.00, 210),
+                AccountPerformancePoint("m3_6", "Aug 01", "Aug 1", 10750.00, 10890.00, 140.00, 275),
+                AccountPerformancePoint("m3_7", "Aug 15", "Now", 11065.40, 11164.80, 99.40, 340)
+            )
+            PerformanceTimeRange.YEAR_1 -> listOf(
+                AccountPerformancePoint("y1_1", "Aug '25", "Aug", 5000.00, 5000.00, 0.00, 0),
+                AccountPerformancePoint("y1_2", "Oct '25", "Oct", 6100.00, 6220.00, 120.00, 180),
+                AccountPerformancePoint("y1_3", "Dec '25", "Dec", 7350.00, 7480.00, 130.00, 390),
+                AccountPerformancePoint("y1_4", "Feb '26", "Feb", 8200.00, 8150.00, -50.00, 560),
+                AccountPerformancePoint("y1_5", "Apr '26", "Apr", 9400.00, 9580.00, 180.00, 780),
+                AccountPerformancePoint("y1_6", "Jun '26", "Jun", 10250.00, 10390.00, 140.00, 990),
+                AccountPerformancePoint("y1_7", "Aug '26", "Now", 11065.40, 11164.80, 99.40, 1250)
+            )
+            PerformanceTimeRange.ALL -> listOf(
+                AccountPerformancePoint("all_1", "2024", "2024", 3000.00, 3000.00, 0.00, 0),
+                AccountPerformancePoint("all_2", "Q2 24", "Q2 '24", 4200.00, 4350.00, 150.00, 320),
+                AccountPerformancePoint("all_3", "Q4 24", "Q4 '24", 5800.00, 5920.00, 120.00, 710),
+                AccountPerformancePoint("all_4", "Q2 25", "Q2 '25", 7900.00, 8050.00, 150.00, 1150),
+                AccountPerformancePoint("all_5", "Q4 25", "Q4 '25", 9600.00, 9780.00, 180.00, 1680),
+                AccountPerformancePoint("all_6", "Q2 26", "Q2 '26", 10650.00, 10800.00, 150.00, 2190),
+                AccountPerformancePoint("all_7", "NOW", "Now", 11065.40, 11164.80, 99.40, 2640)
+            )
+        }
+    }
+
     private val _uiState = MutableStateFlow(
         TradingUiState(
             robots = defaultRobots,
             symbols = defaultSymbols,
             signals = defaultSignals,
-            openTrades = defaultTrades
+            openTrades = defaultTrades,
+            tradeHistory = defaultClosedTrades,
+            performancePoints = generatePerformancePoints(PerformanceTimeRange.MONTH_1)
         )
     )
     val uiState: StateFlow<TradingUiState> = _uiState.asStateFlow()
@@ -404,15 +609,75 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun closeTrade(ticketId: Long) {
         _uiState.update { current ->
-            current.copy(openTrades = current.openTrades.filter { it.ticketId != ticketId })
+            val targetTrade = current.openTrades.find { it.ticketId == ticketId }
+            val updatedOpen = current.openTrades.filter { it.ticketId != ticketId }
+            val updatedHistory = if (targetTrade != null) {
+                val pipsDiff = (targetTrade.currentPrice - targetTrade.openPrice) * (if (targetTrade.type == SignalType.BUY) 1.0 else -1.0)
+                val roundedPips = Math.round(pipsDiff * 10.0) / 10.0
+                val closedItem = ClosedTrade(
+                    ticketId = targetTrade.ticketId,
+                    symbol = targetTrade.symbol,
+                    type = targetTrade.type,
+                    lotSize = targetTrade.lotSize,
+                    openPrice = targetTrade.openPrice,
+                    closePrice = targetTrade.currentPrice,
+                    profitLossUsd = targetTrade.profitUsd,
+                    pips = roundedPips,
+                    openTime = targetTrade.openTime,
+                    closeTime = "Just now",
+                    exitReason = if (targetTrade.profitUsd >= 0) "Manual Profit Lock" else "Manual Cut",
+                    commissionUsd = -0.35,
+                    swapUsd = 0.00
+                )
+                listOf(closedItem) + current.tradeHistory
+            } else {
+                current.tradeHistory
+            }
+            current.copy(
+                openTrades = updatedOpen,
+                tradeHistory = updatedHistory,
+                recentTelemetryLog = "Closed trade #$ticketId on MT5 with P/L: $${targetTrade?.profitUsd ?: 0.0}"
+            )
         }
     }
 
     fun closeAllTrades() {
         _uiState.update { current ->
-            current.copy(openTrades = emptyList())
+            val closedItems = current.openTrades.map { targetTrade ->
+                val pipsDiff = (targetTrade.currentPrice - targetTrade.openPrice) * (if (targetTrade.type == SignalType.BUY) 1.0 else -1.0)
+                val roundedPips = Math.round(pipsDiff * 10.0) / 10.0
+                ClosedTrade(
+                    ticketId = targetTrade.ticketId,
+                    symbol = targetTrade.symbol,
+                    type = targetTrade.type,
+                    lotSize = targetTrade.lotSize,
+                    openPrice = targetTrade.openPrice,
+                    closePrice = targetTrade.currentPrice,
+                    profitLossUsd = targetTrade.profitUsd,
+                    pips = roundedPips,
+                    openTime = targetTrade.openTime,
+                    closeTime = "Just now",
+                    exitReason = "Bulk Close (Emergency)",
+                    commissionUsd = -0.35,
+                    swapUsd = 0.00
+                )
+            }
+            current.copy(
+                openTrades = emptyList(),
+                tradeHistory = closedItems + current.tradeHistory,
+                recentTelemetryLog = "Closed all ${closedItems.size} positions via MT5 command"
+            )
         }
         voiceEngine.speak("All active trades closed on MetaTrader.")
+    }
+
+    fun refreshTradeHistoryFromApi() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(recentTelemetryLog = "Polling /api/mt5/history for closed orders...") }
+            delay(500)
+            _uiState.update { it.copy(recentTelemetryLog = "Trade history synchronized with MT5 Bridge.") }
+            voiceEngine.speak("Trade history synchronized.")
+        }
     }
 
     fun addNewRobot(name: String, author: String, version: String, description: String) {
@@ -465,6 +730,74 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(isVoiceEnabled = newVal) }
         if (newVal) {
             voiceEngine.speak("Voice telemetry enabled.")
+        }
+    }
+
+    fun togglePushNotifications() {
+        val newVal = !_uiState.value.isPushNotificationEnabled
+        _uiState.update { it.copy(isPushNotificationEnabled = newVal) }
+        val msg = if (newVal) "Signal push alerts enabled." else "Signal push alerts disabled."
+        voiceEngine.speak(msg)
+    }
+
+    fun dispatchSignalAlertNotification(signal: TradeSignal) {
+        if (_uiState.value.isPushNotificationEnabled) {
+            signalNotificationManager.notifyNewSignal(signal, _uiState.value.goldLivePrice)
+            _uiState.update {
+                it.copy(
+                    recentTelemetryLog = "⚡ Signal alert notification dispatched: ${signal.type.name} ${signal.symbol}"
+                )
+            }
+        }
+    }
+
+    fun testTriggerSignalPushNotification() {
+        val activeSignal = _uiState.value.signals.firstOrNull() ?: TradeSignal(
+            id = "sig_live_test",
+            symbol = "XAUUSD",
+            type = SignalType.BUY,
+            entryPrice = _uiState.value.goldLivePrice,
+            stopLoss = _uiState.value.goldLivePrice - 8.0,
+            takeProfit1 = _uiState.value.goldLivePrice + 6.0,
+            takeProfit2 = _uiState.value.goldLivePrice + 12.0,
+            trailingStopPips = 30.0,
+            confidencePercent = 96.0,
+            timeAgo = "Just now",
+            reason = "Institutional liquidity sweep + Golden pocket reversal on M15"
+        )
+        dispatchSignalAlertNotification(activeSignal)
+        voiceEngine.speak("Incoming ${activeSignal.type.name} signal alert on ${activeSignal.symbol}.")
+    }
+
+    fun selectPerformanceTimeRange(range: PerformanceTimeRange) {
+        _uiState.update {
+            it.copy(
+                selectedPerformanceRange = range,
+                performancePoints = generatePerformancePoints(range),
+                recentTelemetryLog = "📊 Performance timeline updated: ${range.label} range selected"
+            )
+        }
+    }
+
+    fun fetchPerformanceHistoryFromApi() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isPerformanceApiLoading = true,
+                    recentTelemetryLog = "🔄 Syncing account balance & equity performance from MT5 Broker API..."
+                )
+            }
+            delay(800) // Simulated ultra-fast REST API response
+            val currentRange = _uiState.value.selectedPerformanceRange
+            val refreshedPoints = generatePerformancePoints(currentRange)
+            _uiState.update {
+                it.copy(
+                    isPerformanceApiLoading = false,
+                    performancePoints = refreshedPoints,
+                    recentTelemetryLog = "✓ MT5 Equity history synced: Peak $${String.format("%.2f", it.peakEquity)}, Growth +${String.format("%.1f", it.netGrowthPercent)}%"
+                )
+            }
+            voiceEngine.speak("Account balance and equity trends refreshed successfully.")
         }
     }
 

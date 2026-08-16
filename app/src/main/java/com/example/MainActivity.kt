@@ -1,9 +1,13 @@
 package com.example
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -48,11 +52,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.CandlestickChartSection
+import com.example.ui.components.GoldBeastHeroBanner
 import com.example.ui.components.GoldBeastHudPanel
 import com.example.ui.components.QuickControlsBar
 import com.example.ui.components.RobotCharacter
 import com.example.ui.components.RobotListSection
 import com.example.ui.components.TradeControls
+import com.example.ui.components.TradeHistorySection
 import com.example.ui.dialogs.ConnectRobotDialog
 import com.example.ui.dialogs.InfoStatusDialog
 import com.example.ui.dialogs.MetaTraderConfigDialog
@@ -96,6 +103,20 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     val accentColor = LocalAppAccentColor.current
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.testTriggerSignalPushNotification()
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -106,11 +127,18 @@ fun MainScreen(
                 AppDrawerContent(
                     selectedAccent = uiState.selectedAccentColor,
                     isVoiceEnabled = uiState.isVoiceEnabled,
+                    isPushNotificationsEnabled = uiState.isPushNotificationEnabled,
                     onSelectAccent = { color ->
                         viewModel.selectAccentColor(color)
                     },
                     onToggleVoice = {
                         viewModel.toggleVoiceEnabled()
+                    },
+                    onTogglePushNotifications = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !uiState.isPushNotificationEnabled) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        viewModel.togglePushNotifications()
                     },
                     onNavigateHome = {
                         scope.launch { drawerState.close() }
@@ -150,7 +178,16 @@ fun MainScreen(
                     .padding(innerPadding),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // 1. Animated Robot Character Component
+                // 1. Futuristic Gold Beast AI Hero Banner
+                item {
+                    GoldBeastHeroBanner(
+                        goldPrice = uiState.goldLivePrice,
+                        winRate = 94.2,
+                        activeRobotsCount = uiState.robots.size
+                    )
+                }
+
+                // 2. Animated Robot Character Component
                 item {
                     RobotCharacter(
                         robot = uiState.activeRobot,
@@ -162,7 +199,7 @@ fun MainScreen(
                     )
                 }
 
-                // 2. Quick Controls Bar (PAIRS, big TRADE/STOP, INFO)
+                // 3. Quick Controls Bar (PAIRS, big TRADE/STOP, INFO)
                 item {
                     QuickControlsBar(
                         isActive = uiState.isAutoTradingActive,
@@ -178,7 +215,7 @@ fun MainScreen(
                     )
                 }
 
-                // 3. Direct MT5 TradeControls (Buy, Sell with Haptics, and Auto Trading Switch)
+                // 4. Direct MT5 TradeControls (Buy, Sell with Haptics, and Auto Trading Switch)
                 item {
                     TradeControls(
                         isAutoTradingActive = uiState.isAutoTradingActive,
@@ -196,7 +233,7 @@ fun MainScreen(
                     )
                 }
 
-                // 4. Gold Beast Real-Time HUD Panel (Price, Signal, Entry/SL/TP, Active Trades)
+                // 5. Gold Beast Real-Time HUD Panel (Price, Signal, Entry/SL/TP, Active Trades)
                 item {
                     GoldBeastHudPanel(
                         goldPrice = uiState.goldLivePrice,
@@ -206,11 +243,32 @@ fun MainScreen(
                         openTrades = uiState.openTrades,
                         onCloseTrade = { ticketId ->
                             viewModel.closeTrade(ticketId)
+                        },
+                        onTestAlertClick = {
+                            viewModel.testTriggerSignalPushNotification()
                         }
                     )
                 }
 
-                // 5. Robot List Section & + CONNECT NEW ROBOT
+                // 6. Interactive Candlestick Chart with Stop Loss, Take Profit & Trailing Stop
+                item {
+                    CandlestickChartSection(
+                        currentPrice = uiState.goldLivePrice,
+                        signal = uiState.signals.firstOrNull()
+                    )
+                }
+
+                // 7. Recent Trade History (Closed Orders from API)
+                item {
+                    TradeHistorySection(
+                        trades = uiState.tradeHistory,
+                        onRefresh = {
+                            viewModel.refreshTradeHistoryFromApi()
+                        }
+                    )
+                }
+
+                // 8. Robot List Section & + CONNECT NEW ROBOT
                 item {
                     RobotListSection(
                         robots = uiState.robots,

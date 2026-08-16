@@ -77,6 +77,42 @@ data class ActiveTrade(
     val openTime: String
 )
 
+data class ClosedTrade(
+    val ticketId: Long,
+    val symbol: String,
+    val type: SignalType,
+    val lotSize: Double,
+    val openPrice: Double,
+    val closePrice: Double,
+    val profitLossUsd: Double,
+    val pips: Double,
+    val openTime: String,
+    val closeTime: String,
+    val exitReason: String = "Take Profit Hit",
+    val magicNumber: Long = 20260815L,
+    val commissionUsd: Double = -0.35,
+    val swapUsd: Double = 0.00
+)
+
+data class AccountPerformancePoint(
+    val id: String,
+    val timestamp: String,
+    val timeLabel: String,
+    val balance: Double,
+    val equity: Double,
+    val floatingPnl: Double = equity - balance,
+    val tradeCount: Int = 0
+)
+
+enum class PerformanceTimeRange(val label: String, val days: Int) {
+    DAY_1("1D", 1),
+    WEEK_1("1W", 7),
+    MONTH_1("1M", 30),
+    MONTH_3("3M", 90),
+    YEAR_1("1Y", 365),
+    ALL("ALL", 999)
+}
+
 data class MetaTraderAccount(
     val accountNumber: String = "8849201",
     val broker: String = "IC Markets Global MT5",

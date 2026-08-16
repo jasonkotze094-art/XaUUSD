@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,6 +69,7 @@ fun GoldBeastHudPanel(
     signal: TradeSignal?,
     openTrades: List<ActiveTrade>,
     onCloseTrade: (Long) -> Unit,
+    onTestAlertClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val accentColor = LocalAppAccentColor.current
@@ -127,36 +130,61 @@ fun GoldBeastHudPanel(
                         }
                     }
 
-                    // Live Signal Badge (BUY / SELL)
-                    val isBuy = signal?.type == SignalType.BUY
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isBuy) SignalBuy.copy(alpha = 0.15f) else SignalSell.copy(alpha = 0.15f))
-                            .border(
-                                1.dp,
-                                if (isBuy) SignalBuy else SignalSell,
-                                RoundedCornerShape(8.dp)
-                            )
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    // Live Signal Badge (BUY / SELL) & Instant Notification Test Button
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        if (onTestAlertClick != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF1E2235))
+                                    .border(1.dp, CyberCardBorder, CircleShape)
+                                    .clickable(onClick = onTestAlertClick)
+                                    .testTag("signal_alert_notification_bell"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.NotificationsActive,
+                                    contentDescription = "Test Signal Alert Notification",
+                                    tint = AccentGold,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+
+                        val isBuy = signal?.type == SignalType.BUY
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isBuy) SignalBuy.copy(alpha = 0.15f) else SignalSell.copy(alpha = 0.15f))
+                                .border(
+                                    1.dp,
+                                    if (isBuy) SignalBuy else SignalSell,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
-                            Icon(
-                                imageVector = if (isBuy) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                                contentDescription = null,
-                                tint = if (isBuy) SignalBuy else SignalSell,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = if (isBuy) "STRONG BUY" else "STRONG SELL",
-                                color = if (isBuy) SignalBuy else SignalSell,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontFamily = FontFamily.Monospace
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isBuy) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                                    contentDescription = null,
+                                    tint = if (isBuy) SignalBuy else SignalSell,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = if (isBuy) "STRONG BUY" else "STRONG SELL",
+                                    color = if (isBuy) SignalBuy else SignalSell,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
                         }
                     }
                 }

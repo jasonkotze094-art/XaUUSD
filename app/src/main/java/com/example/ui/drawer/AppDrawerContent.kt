@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.HorizontalDivider
@@ -62,8 +63,10 @@ import com.example.ui.theme.LocalAppAccentColor
 fun AppDrawerContent(
     selectedAccent: Color,
     isVoiceEnabled: Boolean,
+    isPushNotificationsEnabled: Boolean = true,
     onSelectAccent: (Color) -> Unit,
     onToggleVoice: () -> Unit,
+    onTogglePushNotifications: () -> Unit = {},
     onNavigateHome: () -> Unit,
     onOpenMetaTraderConfig: () -> Unit,
     modifier: Modifier = Modifier
@@ -238,6 +241,56 @@ fun AppDrawerContent(
             Switch(
                 checked = isVoiceEnabled,
                 onCheckedChange = { onToggleVoice() },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.Black,
+                    checkedTrackColor = selectedAccent,
+                    uncheckedThumbColor = CyberTextMuted,
+                    uncheckedTrackColor = CyberCardBorder
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Signal Push Notifications Switch
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(CyberCardBg)
+                .border(BorderStroke(1.dp, CyberCardBorder), RoundedCornerShape(12.dp))
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.NotificationsActive,
+                    contentDescription = null,
+                    tint = if (isPushNotificationsEnabled) selectedAccent else CyberTextMuted,
+                    modifier = Modifier.size(22.dp)
+                )
+                Column {
+                    Text(
+                        text = "Signal Push Alerts",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (isPushNotificationsEnabled) "Instant Buy/Sell alerts" else "Notifications off",
+                        color = CyberTextSecondary,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Switch(
+                checked = isPushNotificationsEnabled,
+                onCheckedChange = { onTogglePushNotifications() },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.Black,
                     checkedTrackColor = selectedAccent,
